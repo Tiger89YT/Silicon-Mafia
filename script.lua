@@ -1,190 +1,239 @@
---[[
-  script.lua - Silicon Mafia Admin Tool
-  Funzioni:
-    • Main GUI: selezione giocatore + Teleport
-    • Fly GUI: toggle volo
-    • ESP GUI: toggle ESP
-    • Troll GUI: sit loop, spin, freeze, reset
---]]
-
--- SERVICES
+-- Variabili e riferimenti
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-
 local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
--- STILE
-local PRIMARY = Color3.fromRGB(0,170,255)
-local ACCENT = Color3.fromRGB(15,15,15)
-local BACK = Color3.fromRGB(20,20,20)
-local FONT = Enum.Font.RobotoMono
+-- Variabile per il giocatore selezionato
+local SelectedPlayer = nil
 
--- FUNZIONI UTILITARIE GUI
-local function makeGui(name)
-  local gui = Instance.new("ScreenGui")
-  gui.Name = name
-  gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-  return gui
-end
+-- Crea la GUI base
+local ScreenGui = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
+ScreenGui.Name = "SiliconMafiaGUI"
 
-local function makeFrame(parent, y)
-  local f = Instance.new("Frame", parent)
-  f.Size = UDim2.new(0,260,0,50)
-  f.Position = UDim2.new(0,10,0,y)
-  f.BackgroundColor3 = BACK
-  f.BorderSizePixel = 0
-  Instance.new("UICorner", f).CornerRadius = UDim.new(0,10)
-  return f
-end
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 300, 0, 400)
+Frame.Position = UDim2.new(0.5, -150, 0.5, -200)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+Frame.ClipsDescendants = true
+Frame.Visible = true
 
-local function makeButton(parent, text, callback)
-  local btn = Instance.new("TextButton", parent)
-  btn.Size = UDim2.new(1,-10,1,-10)
-  btn.Position = UDim2.new(0,5,0,5)
-  btn.BackgroundColor3 = ACCENT
-  btn.TextColor3 = PRIMARY
-  btn.Font = FONT
-  btn.TextSize = 18
-  btn.Text = text
-  btn.AutoButtonColor = false
-  Instance.new("UICorner", btn).CornerRadius=UDim.new(0,8)
+-- Titolo
+local Title = Instance.new("TextLabel", Frame)
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundTransparency = 1
+Title.Text = "Silicon Mafia GUI"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 24
+Title.AnchorPoint = Vector2.new(0.5, 0)
+Title.Position = UDim2.new(0.5, 0, 0, 0)
 
-  -- Animazione click
-  btn.MouseButton1Click:Connect(function()
-    local og = btn.Size
-    local tween1 = TweenService:Create(btn, TweenInfo.new(0.1), {Size = og + UDim2.new(0,0,0,5)})
-    local tween2 = TweenService:Create(btn, TweenInfo.new(0.1), {Size = og})
-    tween1:Play(); tween1.Completed:Wait(); tween2:Play()
-    callback()
-  end)
-  return btn
-end
+-- Dropdown lista giocatori
+local PlayerDropdown = Instance.new("TextButton", Frame)
+PlayerDropdown.Size = UDim2.new(1, -20, 0, 30)
+PlayerDropdown.Position = UDim2.new(0, 10, 0, 50)
+PlayerDropdown.Text = "Seleziona Giocatore"
+PlayerDropdown.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+PlayerDropdown.TextColor3 = Color3.new(1, 1, 1)
+PlayerDropdown.Font = Enum.Font.Gotham
+PlayerDropdown.TextSize = 18
 
--- MAIN GUI: selezione + teleport
-local mainGui = makeGui("MafiaMain")
-local selected = nil
+local DropdownOpen = false
+local DropdownFrame = Instance.new("Frame", Frame)
+DropdownFrame.Size = UDim2.new(1, -20, 0, 150)
+DropdownFrame.Position = UDim2.new(0, 10, 0, 80)
+DropdownFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+DropdownFrame.Visible = false
+DropdownFrame.ClipsDescendants = true
 
-do
-  local f = makeFrame(mainGui, 10)
-  f.Size = UDim2.new(0,260,0,200)
-  -- player buttons container
-  local layout = Instance.new("UIListLayout", f)
-  layout.Padding = UDim.new(0,4)
-  layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-  local function addPlayer(p)
-    if p == LocalPlayer then return end
-    local btn = makeButton(f, p.Name, function()
-      selected = p
-      print("🔵 Sel: "..p.Name)
-      for _,c in pairs(f:GetChildren()) do
-        if c:IsA("TextButton") then c.BackgroundColor3 = ACCENT end
-      end
-      btn.BackgroundColor3 = PRIMARY
-    end)
-  end
-
-  for _,p in pairs(Players:GetPlayers()) do addPlayer(p) end
-  Players.PlayerAdded:Connect(addPlayer)
-
-  makeButton(mainGui, "Teleport Selezionato → Te", function()
-    if selected and selected.Character and selected.Character:FindFirstChild("HumanoidRootPart")
-      and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        selected.Character.HumanoidRootPart.CFrame = 
-          LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(2,0,0)
-    end
-  end).Parent.Position = UDim2.new(0,10,0,220)
-end
-
--- FLY GUI
-local flyGui = makeGui("MafiaFly")
-do
-  local f = makeFrame(flyGui, 10)
-  local flying, bv = false, nil
-
-  makeButton(f, "Toggle Fly", function()
-    flying = not flying
-    if flying then
-      local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-      if hrp then
-        bv = Instance.new("BodyVelocity", hrp)
-        bv.MaxForce = Vector3.new(1e5,1e5,1e5)
-        bv.Velocity = Vector3.new(0,0,0)
-        RunService.Heartbeat:Connect(function()
-          if flying and bv and hrp then
-            bv.Velocity = hrp.CFrame.LookVector * 50
-          end
-        end)
-      end
-    else
-      if bv then bv:Destroy(); bv=nil end
-    end
-  end)
-end
-
--- ESP GUI
-local espGui = makeGui("MafiaESP")
-do
-  local enabled = false
-  local boxes = {}
-
-  local function toggleESP()
-    enabled = not enabled
-    if enabled then
-      for _,p in pairs(Players:GetPlayers()) do
-        if p~=LocalPlayer and p.Character then
-          local h = p.Character:FindFirstChild("HumanoidRootPart")
-          if h then
-            local b = Instance.new("BoxHandleAdornment", h)
-            b.Adornee = h
-            b.AlwaysOnTop = true
-            b.ZIndex = 10
-            b.Size = Vector3.new(2,3,1)
-            b.Color3 = PRIMARY
-            b.Transparency = 0.5
-            boxes[p] = b
-          end
+-- Funzione per aggiornare lista giocatori
+local function UpdatePlayerList()
+    -- Cancella vecchi bottoni
+    for _, child in pairs(DropdownFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
         end
-      end
-      Players.PlayerAdded:Connect(toggleESP)
+    end
+
+    local yOffset = 0
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local btn = Instance.new("TextButton", DropdownFrame)
+            btn.Size = UDim2.new(1, 0, 0, 30)
+            btn.Position = UDim2.new(0, 0, 0, yOffset)
+            btn.Text = plr.Name
+            btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            btn.TextColor3 = Color3.new(1, 1, 1)
+            btn.Font = Enum.Font.Gotham
+            btn.TextSize = 16
+
+            btn.MouseButton1Click:Connect(function()
+                SelectedPlayer = plr
+                PlayerDropdown.Text = "Giocatore: " .. plr.Name
+                DropdownFrame.Visible = false
+                DropdownOpen = false
+            end)
+
+            yOffset = yOffset + 30
+        end
+    end
+end
+
+PlayerDropdown.MouseButton1Click:Connect(function()
+    DropdownOpen = not DropdownOpen
+    DropdownFrame.Visible = DropdownOpen
+    if DropdownOpen then
+        UpdatePlayerList()
+    end
+end)
+
+-- Bottone Teletrasporto a Te
+local TpToMeBtn = Instance.new("TextButton", Frame)
+TpToMeBtn.Size = UDim2.new(1, -20, 0, 30)
+TpToMeBtn.Position = UDim2.new(0, 10, 0, 240)
+TpToMeBtn.Text = "Teletrasporta a me"
+TpToMeBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+TpToMeBtn.TextColor3 = Color3.new(1, 1, 1)
+TpToMeBtn.Font = Enum.Font.GothamBold
+TpToMeBtn.TextSize = 18
+
+TpToMeBtn.MouseButton1Click:Connect(function()
+    if SelectedPlayer and SelectedPlayer.Character and SelectedPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        SelectedPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(0, 5, 0)
     else
-      for _,b in pairs(boxes) do b:Destroy() end
-      boxes = {}
+        warn("Seleziona un giocatore con personaggio in gioco.")
     end
-  end
+end)
 
-  makeButton(makeFrame(espGui,10), "Toggle ESP", toggleESP)
+-- Bottone Teletrasporto da Te
+local TpFromMeBtn = Instance.new("TextButton", Frame)
+TpFromMeBtn.Size = UDim2.new(1, -20, 0, 30)
+TpFromMeBtn.Position = UDim2.new(0, 10, 0, 280)
+TpFromMeBtn.Text = "Teletrasporta me a giocatore"
+TpFromMeBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+TpFromMeBtn.TextColor3 = Color3.new(1, 1, 1)
+TpFromMeBtn.Font = Enum.Font.GothamBold
+TpFromMeBtn.TextSize = 18
+
+TpFromMeBtn.MouseButton1Click:Connect(function()
+    if SelectedPlayer and SelectedPlayer.Character and SelectedPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = SelectedPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(0, 5, 0)
+    else
+        warn("Seleziona un giocatore con personaggio in gioco.")
+    end
+end)
+
+-- Toggle Fly
+local Flying = false
+local FlySpeed = 50
+local FlyBodyVelocity = nil
+
+local FlyBtn = Instance.new("TextButton", Frame)
+FlyBtn.Size = UDim2.new(1, -20, 0, 30)
+FlyBtn.Position = UDim2.new(0, 10, 0, 320)
+FlyBtn.Text = "Fly OFF"
+FlyBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+FlyBtn.TextColor3 = Color3.new(1, 1, 1)
+FlyBtn.Font = Enum.Font.GothamBold
+FlyBtn.TextSize = 18
+
+local function StopFly()
+    if FlyBodyVelocity then
+        FlyBodyVelocity:Destroy()
+        FlyBodyVelocity = nil
+    end
+    Flying = false
+    FlyBtn.Text = "Fly OFF"
 end
 
--- TROLL GUI (server-side se privilegi)
-local trollGui = makeGui("MafiaTroll")
-do
-  local function doAction(action)
-    if not selected or not selected.Character then return end
-    local hrp = selected.Character:FindFirstChild("HumanoidRootPart")
-    local hum = selected.Character:FindFirstChildOfClass("Humanoid")
-    if action=="sitLoop" then
-      spawn(function() for i=1,20 do hum.Sit=true; wait(0.2) end end)
-    elseif action=="spin" then
-      local bav = Instance.new("BodyAngularVelocity", hrp)
-      bav.AngularVelocity = Vector3.new(0,10,0)
-      bav.MaxTorque = Vector3.new(0,1e5,0)
-      game.Debris:AddItem(bav,2)
-    elseif action=="freeze" then
-      hum.PlatformStand = true
-      wait(2)
-      hum.PlatformStand = false
-    elseif action=="reset" then
-      hum.Health = 0
-    end
-  end
+local function StartFly()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        FlyBodyVelocity = Instance.new("BodyVelocity")
+        FlyBodyVelocity.Velocity = Vector3.new(0,0,0)
+        FlyBodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        FlyBodyVelocity.Parent = LocalPlayer.Character.HumanoidRootPart
+        Flying = true
+        FlyBtn.Text = "Fly ON"
 
-  local baseY = 10
-  for i,act in ipairs({"sitLoop","spin","freeze","reset"}) do
-    makeButton(makeFrame(trollGui, baseY), act, function() doAction(act) end)
-    baseY += 60
-  end
+        -- Update velocity in RunService
+        RunService:BindToRenderStep("FlyMovement", 301, function()
+            if Flying and FlyBodyVelocity and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local direction = Vector3.new()
+                if UIS:IsKeyDown(Enum.KeyCode.W) then direction = direction + workspace.CurrentCamera.CFrame.LookVector end
+                if UIS:IsKeyDown(Enum.KeyCode.S) then direction = direction - workspace.CurrentCamera.CFrame.LookVector end
+                if UIS:IsKeyDown(Enum.KeyCode.A) then direction = direction - workspace.CurrentCamera.CFrame.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.D) then direction = direction + workspace.CurrentCamera.CFrame.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.new(0,1,0) end
+                if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then direction = direction - Vector3.new(0,1,0) end
+
+                FlyBodyVelocity.Velocity = direction.Unit * FlySpeed
+            else
+                FlyBodyVelocity.Velocity = Vector3.new(0,0,0)
+            end
+        end)
+    end
 end
 
-print("✨ Silicon Mafia script initialized!")
+FlyBtn.MouseButton1Click:Connect(function()
+    if Flying then
+        RunService:UnbindFromRenderStep("FlyMovement")
+        StopFly()
+    else
+        StartFly()
+    end
+end)
+
+-- Funzioni Troll
+
+-- Loop Sit
+local LoopSitActive = false
+local LoopSitConnection = nil
+
+local LoopSitBtn = Instance.new("TextButton", Frame)
+LoopSitBtn.Size = UDim2.new(1, -20, 0, 30)
+LoopSitBtn.Position = UDim2.new(0, 10, 0, 360)
+LoopSitBtn.Text = "Toggle Loop Sit"
+LoopSitBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+LoopSitBtn.TextColor3 = Color3.new(1, 1, 1)
+LoopSitBtn.Font = Enum.Font.GothamBold
+LoopSitBtn.TextSize = 18
+
+LoopSitBtn.MouseButton1Click:Connect(function()
+    if LoopSitActive then
+        if LoopSitConnection then
+            LoopSitConnection:Disconnect()
+            LoopSitConnection = nil
+        end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.Sit = false
+        end
+        LoopSitActive = false
+        LoopSitBtn.Text = "Toggle Loop Sit"
+    else
+        LoopSitActive = true
+        LoopSitBtn.Text = "Loop Sit ON"
+        LoopSitConnection = RunService.Heartbeat:Connect(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                LocalPlayer.Character.Humanoid.Sit = true
+            end
+        end)
+    end
+end)
+
+-- Reset Character
+local ResetBtn = Instance.new("TextButton", Frame)
+ResetBtn.Size = UDim2.new(1, -20, 0, 30)
+ResetBtn.Position = UDim2.new(0, 10, 0, 400)
+ResetBtn.Text = "Reset Character"
+ResetBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+ResetBtn.TextColor3 = Color3.new(1, 1, 1)
+ResetBtn.Font = Enum.Font.GothamBold
+ResetBtn.TextSize = 18
+
+ResetBtn.MouseButton1Click:Connect(function()
+    LocalPlayer.Character:BreakJoints()
+end)
